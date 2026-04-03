@@ -185,6 +185,7 @@ interface SportChallenge {
 
 interface UserProfile {
   name: string;
+  email: string;
   gender: "male" | "female";
   age: number;
   height: number; // in cm
@@ -1112,10 +1113,11 @@ interface HistoryScreenProps {
   workoutHistory: WorkoutEntry[];
   onBack: () => void;
   onDelete: (type: "bmi" | "mood" | "nutrition" | "workout", id: string) => void;
+  onBackup: () => void;
   theme: any;
 }
 
-function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHistory, onBack, onDelete, theme }: HistoryScreenProps) {
+function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHistory, onBack, onDelete, onBackup, theme }: HistoryScreenProps) {
   const [activeTab, setActiveTab] = useState<"bmi" | "mood" | "nutrition" | "workout">("bmi");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -1152,11 +1154,19 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
       exit={{ opacity: 0, x: -20 }}
       className="space-y-6 pb-20"
     >
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={onBack} className="p-2 -ml-2">
-          <ArrowLeft size={24} />
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <button onClick={onBack} className="p-2 -ml-2">
+            <ArrowLeft size={24} />
+          </button>
+          <h2 className="text-2xl font-bold text-slate-800">Lịch sử chi tiết</h2>
+        </div>
+        <button
+          onClick={onBackup}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all"
+        >
+          <Mail size={16} /> Sao lưu về Gmail
         </button>
-        <h2 className="text-2xl font-bold text-slate-800">Lịch sử chi tiết</h2>
       </div>
 
       {/* Tabs */}
@@ -2123,6 +2133,7 @@ export default function App() {
   });
   const [profile, setProfile] = useState<UserProfile>({
     name: "",
+    email: "",
     gender: "male",
     age: 0,
     height: 0,
@@ -2206,6 +2217,7 @@ export default function App() {
         setProfile((prev) => ({
           ...prev,
           name: data.name || "",
+          email: data.email || user.email || "",
           gender: data.gender || "male",
           age: data.age || 0,
           height: data.height || 0,
@@ -2305,6 +2317,7 @@ export default function App() {
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         name: newProfile.name,
+        email: user.email || newProfile.email,
         gender: newProfile.gender,
         age: newProfile.age,
         height: newProfile.height,
@@ -2905,6 +2918,7 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   className="flex flex-col items-end mr-2 hover:bg-slate-100 p-2 rounded-xl transition-all text-right"
                 >
                   <p className="text-[10px] font-bold text-slate-800 leading-none">{profile.name || "Người dùng"}</p>
+                  <p className="text-[8px] text-slate-400 font-medium">{profile.email}</p>
                   <p className="text-[8px] text-slate-400 uppercase tracking-wider">
                     {schoolProfile.className}
                   </p>
@@ -2980,6 +2994,16 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   </div>
 
                   <div className="glass p-6 rounded-3xl space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Email (Google)</label>
+                      <input
+                        type="email"
+                        value={user?.email || profile.email}
+                        readOnly
+                        className="w-full bg-slate-100 border-none rounded-xl p-4 text-slate-500 font-medium cursor-not-allowed"
+                      />
+                    </div>
+
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Họ và tên</label>
                       <input
@@ -3627,6 +3651,17 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                     else if (type === "mood") deleteMoodEntry(id);
                     else if (type === "nutrition") deleteNutritionEntry(id);
                     else if (type === "workout") deleteWorkoutEntry(id);
+                  }}
+                  onBackup={() => {
+                    const summary = `
+                      BMI: ${bmiHistory.length} bản ghi
+                      Tâm lý: ${moodHistory.length} bản ghi
+                      Dinh dưỡng: ${nutritionHistory.length} bản ghi
+                      Tập luyện: ${workoutHistory.length} bản ghi
+                    `;
+                    sendEmailNotification("Sao lưu dữ liệu", `Dưới đây là bản tóm tắt dữ liệu của bạn: ${summary}`);
+                    setSuccessMessage("Đã gửi bản sao lưu về Gmail của bạn!");
+                    setTimeout(() => setSuccessMessage(null), 3000);
                   }}
                   theme={mainTheme}
                 />
