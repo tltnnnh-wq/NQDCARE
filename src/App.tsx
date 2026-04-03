@@ -158,7 +158,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
-type AppStep = "loading" | "login" | "profile_setup" | "loading_after_setup" | "dashboard" | "input" | "result" | "vital_mind" | "nutrition" | "history" | "exercise" | "mood_history";
+type AppStep = "loading" | "profile_setup" | "loading_after_setup" | "dashboard" | "input" | "result" | "vital_mind" | "nutrition" | "history" | "exercise" | "mood_history";
 type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
 type Mood = "happy" | "joyful" | "sad" | "anxious" | "angry" | "sick";
 type NutritionGoal = "weight_loss" | "weight_gain" | "maintenance" | "muscle_gain" | "cutting" | "eat_clean";
