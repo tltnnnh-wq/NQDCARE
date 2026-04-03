@@ -1,0 +1,212 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId} (Firebase Auth UID)
+// Fields:
+//   - uid: string (required) - User's unique ID
+//   - name: string (required) - User's display name
+//   - gender: string (optional) - 'male' or 'female'
+//   - age: number (optional) - User's age
+//   - height: number (optional) - User's height in cm
+//   - weight: number (optional) - User's weight in kg
+//   - activity: string (optional) - Activity level
+//   - school: string (optional) - School name
+//   - role: string (optional) - User role (e.g., 'student', 'admin')
+//   - grade: string (optional) - Grade level
+//   - className: string (optional) - Class name
+//   - themeColor: string (optional) - Selected theme color
+//
+// Collection: users/{userId}/bmi_history
+// Document ID: {entryId} (Auto-generated)
+// Fields:
+//   - date: string (required) - ISO date string
+//   - weight: number (optional) - Weight at recording
+//   - height: number (optional) - Height at recording
+//   - score: number (required) - BMI score
+//   - category: string (optional) - BMI category
+//   - label: string (optional) - BMI label
+//   - color: string (optional) - UI color class
+//
+// Collection: users/{userId}/mood_history
+// Document ID: {entryId} (Auto-generated)
+// Fields:
+//   - date: string (required) - ISO date string
+//   - mood: string (required) - Mood type
+//   - note: string (optional) - User's note
+//   - followUp: string (optional) - Follow-up info
+//
+// Collection: users/{userId}/nutrition_history
+// Document ID: {entryId} (Auto-generated)
+// Fields:
+//   - date: string (required) - ISO date string
+//   - goal: string (required) - Nutrition goal
+//   - advice: string (optional) - AI advice text
+//   - waterIntake: number (optional) - Water intake in glasses
+//
+// Collection: users/{userId}/gratitude_journal
+// Document ID: {entryId} (Auto-generated)
+// Fields:
+//   - date: string (required) - ISO date string
+//   - items: list (required) - List of gratitude items
+//
+// Collection: users/{userId}/ai_feedback
+// Document ID: {entryId} (Auto-generated)
+// Fields:
+//   - date: string (required) - ISO date string
+//   - issue: string (required) - Mental health issue discussed
+//   - advice: string (required) - AI advice provided
+//   - helpful: boolean (optional) - Whether user found it helpful
+//   - note: string (optional) - User's additional note
+//
+// Collection: users/{userId}/workout_history
+// Document ID: {entryId} (Auto-generated)
+// Fields:
+//   - date: string (required) - ISO date string
+//   - sportId: string (required) - Sport ID
+//   - sportName: string (required) - Sport name
+//   - duration: number (required) - Duration in minutes
+//   - intensity: string (required) - 'low', 'moderate', or 'high'
+//   - note: string (optional) - User's note
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "tranlethaonguyen08112010@gmail.com" && request.auth.token.email_verified == true));
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function isValidString(field, maxLen) {
+      return request.resource.data[field] is string && request.resource.data[field].size() <= maxLen;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    
+    function isValidUserProfile(data) {
+      return data.uid is string && data.name is string && data.name.size() < 100;
+    }
+    
+    function isValidBMIEntry(data) {
+      return data.date is string && data.score is number;
+    }
+    
+    function isValidMoodEntry(data) {
+      return data.date is string && data.mood is string &&
+             (!('note' in data) || (data.note is string && data.note.size() < 1000)) &&
+             (!('followUp' in data) || (data.followUp is string && data.followUp.size() < 2000));
+    }
+    
+    function isValidNutritionEntry(data) {
+      return data.date is string && data.goal is string &&
+             data.advice is string && data.advice.size() < 10000 &&
+             data.waterIntake is number;
+    }
+    
+    function isValidGratitudeEntry(data) {
+      return data.date is string && data.items is list && data.items.size() <= 10;
+    }
+
+    function isValidAiFeedback(data) {
+      return data.date is string && data.issue is string && data.advice is string &&
+             data.helpful is bool && (!('note' in data) || (data.note is string && data.note.size() < 1000));
+    }
+
+    function isValidWorkoutEntry(data) {
+      return data.date is string && data.sportId is string && data.sportName is string && 
+             data.duration is number && data.intensity in ['low', 'moderate', 'high'] &&
+             (!('note' in data) || (data.note is string && data.note.size() < 1000));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Prevent self-escalation: only admins can set 'role' to 'admin'
+      allow create: if isOwner(userId) && 
+                      isValidUserProfile(request.resource.data) && 
+                      (request.resource.data.role != 'admin' || isAdmin());
+                      
+      allow update: if isOwner(userId) && 
+                      isValidUserProfile(request.resource.data) && 
+                      (request.resource.data.role == resource.data.role || isAdmin());
+
+      match /bmi_history/{entryId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidBMIEntry(request.resource.data);
+        allow update: if isOwner(userId) && isValidBMIEntry(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+      
+      match /mood_history/{entryId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidMoodEntry(request.resource.data);
+        allow update: if isOwner(userId) && isValidMoodEntry(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+      
+      match /nutrition_history/{entryId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidNutritionEntry(request.resource.data);
+        allow update: if isOwner(userId) && isValidNutritionEntry(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+      
+      match /gratitude_journal/{entryId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidGratitudeEntry(request.resource.data);
+        allow update: if isOwner(userId) && isValidGratitudeEntry(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /ai_feedback/{entryId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidAiFeedback(request.resource.data);
+        allow update: if isOwner(userId) && isValidAiFeedback(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /workout_history/{entryId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidWorkoutEntry(request.resource.data);
+        allow update: if isOwner(userId) && isValidWorkoutEntry(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+    
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

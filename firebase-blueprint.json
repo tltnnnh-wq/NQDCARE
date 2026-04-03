@@ -1,0 +1,113 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User's personal information and school profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "gender": { "type": "string", "enum": ["male", "female"] },
+        "age": { "type": "number" },
+        "height": { "type": "number" },
+        "weight": { "type": "number" },
+        "activity": { "type": "string" },
+        "school": { "type": "string" },
+        "role": { "type": "string" },
+        "grade": { "type": "string" },
+        "className": { "type": "string" },
+        "themeColor": { "type": "string" }
+      },
+      "required": ["uid", "name"]
+    },
+    "BMIEntry": {
+      "title": "BMIEntry",
+      "description": "A single BMI measurement record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "weight": { "type": "number" },
+        "height": { "type": "number" },
+        "score": { "type": "number" },
+        "category": { "type": "string" },
+        "label": { "type": "string" },
+        "color": { "type": "string" }
+      },
+      "required": ["date", "score"]
+    },
+    "MoodEntry": {
+      "title": "MoodEntry",
+      "description": "A single mood tracking record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "mood": { "type": "string" },
+        "note": { "type": "string" },
+        "followUp": { "type": "string" }
+      },
+      "required": ["date", "mood"]
+    },
+    "NutritionEntry": {
+      "title": "NutritionEntry",
+      "description": "A single nutrition advice record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "goal": { "type": "string" },
+        "advice": { "type": "string" },
+        "waterIntake": { "type": "number" }
+      },
+      "required": ["date", "goal"]
+    },
+    "GratitudeEntry": {
+      "title": "GratitudeEntry",
+      "description": "A single gratitude journal entry",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "items": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["date", "items"]
+    },
+    "WorkoutEntry": {
+      "title": "WorkoutEntry",
+      "description": "A single workout session record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "sportId": { "type": "string" },
+        "sportName": { "type": "string" },
+        "duration": { "type": "number" },
+        "intensity": { "type": "string", "enum": ["low", "moderate", "high"] },
+        "note": { "type": "string" }
+      },
+      "required": ["date", "sportId", "sportName", "duration", "intensity"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/users/{userId}/bmi_history/{entryId}": {
+      "schema": "BMIEntry",
+      "description": "User's BMI history"
+    },
+    "/users/{userId}/mood_history/{entryId}": {
+      "schema": "MoodEntry",
+      "description": "User's mood history"
+    },
+    "/users/{userId}/nutrition_history/{entryId}": {
+      "schema": "NutritionEntry",
+      "description": "User's nutrition history"
+    },
+    "/users/{userId}/gratitude_journal/{entryId}": {
+      "schema": "GratitudeEntry",
+      "description": "User's gratitude journal"
+    },
+    "/users/{userId}/workout_history/{entryId}": {
+      "schema": "WorkoutEntry",
+      "description": "User's workout history"
+    }
+  }
+}
