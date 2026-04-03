@@ -43,7 +43,7 @@ import {
   ChevronUp,
   ExternalLink,
   Bell,
-  Mail,
+  FileSpreadsheet,
   ClipboardList,
   Trophy,
   Timer,
@@ -82,12 +82,13 @@ import {
   LineChart,
   Line
 } from "recharts";
+import * as XLSX from 'xlsx';
 import { GoogleGenAI } from "@google/genai";
 import { cn } from "./lib/utils";
 import { 
   auth, 
   db, 
-  loginWithGoogle, 
+  loginAnonymously, 
   logout, 
   onAuthStateChanged 
 } from "./firebase";
@@ -589,11 +590,17 @@ function Dashboard({ profile, bmiHistory, moodHistory, nutritionHistory, onNavig
       exit={{ opacity: 0, y: -20 }}
       className="space-y-6 pb-20"
     >
-      <div className="space-y-1">
-        <h2 className="text-3xl font-extrabold text-slate-800">
-          Chào, {profile.name.split(' ')[0]}!
-        </h2>
-        <p className="text-slate-500 font-medium">Tổng quan sức khỏe hôm nay</p>
+      <div className="flex items-end justify-between">
+        <div className="space-y-1">
+          <h2 className="text-3xl font-extrabold text-slate-800">
+            Chào, {profile.name.split(' ')[0]}!
+          </h2>
+          <p className="text-slate-500 font-medium">Tổng quan sức khỏe hôm nay</p>
+        </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold border border-emerald-100 shadow-sm">
+          <RefreshCw size={10} className="animate-spin-slow" />
+          <span>Đã tự động lưu (Cloud)</span>
+        </div>
       </div>
 
       {/* BMI Card */}
@@ -1113,11 +1120,11 @@ interface HistoryScreenProps {
   workoutHistory: WorkoutEntry[];
   onBack: () => void;
   onDelete: (type: "bmi" | "mood" | "nutrition" | "workout", id: string) => void;
-  onBackup: () => void;
+  onExportExcel: () => void;
   theme: any;
 }
 
-function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHistory, onBack, onDelete, onBackup, theme }: HistoryScreenProps) {
+function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHistory, onBack, onDelete, onExportExcel, theme }: HistoryScreenProps) {
   const [activeTab, setActiveTab] = useState<"bmi" | "mood" | "nutrition" | "workout">("bmi");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -1161,12 +1168,14 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
           </button>
           <h2 className="text-2xl font-bold text-slate-800">Lịch sử chi tiết</h2>
         </div>
-        <button
-          onClick={onBackup}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all"
-        >
-          <Mail size={16} /> Sao lưu về Gmail
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onExportExcel}
+            className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-xl text-xs font-bold hover:bg-green-100 transition-all"
+          >
+            <FileSpreadsheet size={16} /> Xuất Excel
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -1230,9 +1239,7 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm("Bạn có chắc chắn muốn xóa kết quả này?")) {
-                                onDelete("bmi", (entry as any).id || "");
-                              }
+                              onDelete("bmi", (entry as any).id || "");
                             }}
                             className="p-2 text-slate-300 hover:text-red-500 transition-colors"
                           >
@@ -1316,9 +1323,7 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm("Bạn có chắc chắn muốn xóa nhật ký này?")) {
-                                onDelete("mood", (entry as any).id || "");
-                              }
+                              onDelete("mood", (entry as any).id || "");
                             }}
                             className="p-2 text-slate-300 hover:text-red-500 transition-colors"
                           >
@@ -1401,9 +1406,7 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm("Bạn có chắc chắn muốn xóa nhật ký này?")) {
-                                onDelete("nutrition", (entry as any).id || "");
-                              }
+                              onDelete("nutrition", (entry as any).id || "");
                             }}
                             className="p-2 text-slate-300 hover:text-red-500 transition-colors"
                           >
@@ -1487,9 +1490,7 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm("Bạn có chắc chắn muốn xóa nhật ký này?")) {
-                                onDelete("workout", (entry as any).id || "");
-                              }
+                              onDelete("workout", (entry as any).id || "");
                             }}
                             className="p-2 text-slate-300 hover:text-red-500 transition-colors"
                           >
@@ -1995,9 +1996,7 @@ function VitalMindScreen({
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (window.confirm("Bạn có chắc chắn muốn xóa nhật ký này?")) {
-                                    onDeleteGratitude(entry.date);
-                                  }
+                                  onDeleteGratitude(entry.date);
                                 }}
                                 className="p-1 text-slate-300 hover:text-red-500 transition-colors"
                               >
@@ -2094,7 +2093,7 @@ function LoginScreen({ onLogin, theme }: { onLogin: () => void, theme: any }) {
         <div className="glass p-8 rounded-[40px] shadow-2xl space-y-6 border border-white/50">
           <div className="space-y-2">
             <h2 className="text-xl font-bold text-slate-800">Chào mừng bạn!</h2>
-            <p className="text-sm text-slate-500">Đăng nhập để lưu trữ dữ liệu sức khỏe của bạn trọn đời.</p>
+            <p className="text-sm text-slate-500">Bắt đầu hành trình chăm sóc sức khỏe của bạn ngay hôm nay.</p>
           </div>
           
           <button
@@ -2106,11 +2105,11 @@ function LoginScreen({ onLogin, theme }: { onLogin: () => void, theme: any }) {
             )}
           >
             <LogIn size={20} />
-            Đăng nhập bằng Google
+            Bắt đầu ngay
           </button>
           
           <p className="text-[10px] text-slate-400">
-            Bằng cách đăng nhập, bạn đồng ý với các điều khoản sử dụng của chúng tôi.
+            Dữ liệu của bạn sẽ được lưu trữ an toàn trên thiết bị này.
           </p>
         </div>
       </motion.div>
@@ -2191,12 +2190,12 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
-      if (!currentUser && step !== "loading") {
-        setStep("login");
+      if (!currentUser) {
+        loginAnonymously().catch(err => console.error("Anonymous login failed", err));
       }
     });
     return () => unsubscribe();
-  }, [step]);
+  }, []);
 
   // Firestore Sync
   useEffect(() => {
@@ -2329,8 +2328,6 @@ export default function App() {
         className: newSchoolProfile.className,
         themeColor: theme.color,
       }, { merge: true });
-      // Notify email
-      sendEmailNotification("Cập nhật hồ sơ", `Bạn vừa cập nhật thông tin hồ sơ cá nhân.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
     }
@@ -2341,8 +2338,6 @@ export default function App() {
     const path = `users/${user.uid}/bmi_history`;
     try {
       await addDoc(collection(db, "users", user.uid, "bmi_history"), entry);
-      // Notify email
-      sendEmailNotification("Cập nhật BMI", `Bạn vừa cập nhật chỉ số BMI mới: ${entry.score.toFixed(1)} (${entry.label}).`);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }
@@ -2353,8 +2348,6 @@ export default function App() {
     const path = `users/${user.uid}/mood_history`;
     try {
       await addDoc(collection(db, "users", user.uid, "mood_history"), entry);
-      // Notify email
-      sendEmailNotification("Cập nhật tâm lý", `Bạn vừa ghi lại cảm xúc mới: ${MOOD_CONFIG[entry.mood].label}.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }
@@ -2365,8 +2358,6 @@ export default function App() {
     const path = `users/${user.uid}/nutrition_history`;
     try {
       await addDoc(collection(db, "users", user.uid, "nutrition_history"), entry);
-      // Notify email
-      sendEmailNotification("Cập nhật dinh dưỡng", `Bạn vừa ghi lại mục tiêu dinh dưỡng mới: ${NUTRITION_GOALS[entry.goal].label}.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }
@@ -2398,8 +2389,6 @@ export default function App() {
     try {
       await addDoc(collection(db, "users", user.uid, "workout_history"), entry);
       setSuccessMessage("Đã lưu buổi tập luyện!");
-      // Notify email
-      sendEmailNotification("Cập nhật tập luyện", `Bạn vừa ghi lại bài tập mới: ${entry.sportName} (${entry.duration} phút).`);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }
@@ -2416,30 +2405,28 @@ export default function App() {
     }
   };
 
-  // Splash Screen Logic
+  // Handle splash screen transition
+  useEffect(() => {
+    if (step === "loading" && isAuthReady && user) {
+      const timer = setTimeout(() => {
+        if (isProfileSetup) {
+          setStep("dashboard");
+        } else {
+          setStep("profile_setup");
+        }
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [step, isAuthReady, user, isProfileSetup]);
+
+  // Splash Screen Logic (Quotes only)
   useEffect(() => {
     if (step === "loading") {
       const quoteInterval = setInterval(() => {
         setQuoteIndex((prev) => (prev + 1) % POSITIVE_QUOTES.length);
       }, 1500);
 
-      const timer = setTimeout(() => {
-        if (isAuthReady) {
-          if (user) {
-            if (isProfileSetup) {
-              setStep("dashboard");
-            } else {
-              setStep("profile_setup");
-            }
-          } else {
-            setStep("login");
-          }
-        }
-        clearInterval(quoteInterval);
-      }, 8000);
-
       return () => {
-        clearTimeout(timer);
         clearInterval(quoteInterval);
       };
     }
@@ -2550,8 +2537,6 @@ export default function App() {
       await deleteDoc(doc(db, `users/${auth.currentUser.uid}/bmi_history`, id));
       setSuccessMessage("Đã xóa kết quả BMI!");
       setTimeout(() => setSuccessMessage(null), 3000);
-      // Notify email
-      sendEmailNotification("Xóa kết quả BMI", `Bạn vừa xóa một kết quả BMI khỏi lịch sử.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/bmi_history/${id}`);
     }
@@ -2563,8 +2548,6 @@ export default function App() {
       await deleteDoc(doc(db, `users/${auth.currentUser.uid}/mood_history`, id));
       setSuccessMessage("Đã xóa nhật ký tâm lý!");
       setTimeout(() => setSuccessMessage(null), 3000);
-      // Notify email
-      sendEmailNotification("Xóa nhật ký tâm lý", `Bạn vừa xóa một nhật ký tâm lý khỏi lịch sử.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/mood_history/${id}`);
     }
@@ -2576,8 +2559,6 @@ export default function App() {
       await deleteDoc(doc(db, `users/${auth.currentUser.uid}/nutrition_history`, id));
       setSuccessMessage("Đã xóa nhật ký dinh dưỡng!");
       setTimeout(() => setSuccessMessage(null), 3000);
-      // Notify email
-      sendEmailNotification("Xóa nhật ký dinh dưỡng", `Bạn vừa xóa một nhật ký dinh dưỡng khỏi lịch sử.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/nutrition_history/${id}`);
     }
@@ -2589,8 +2570,6 @@ export default function App() {
       await deleteDoc(doc(db, `users/${auth.currentUser.uid}/workout_history`, id));
       setSuccessMessage("Đã xóa nhật ký tập luyện!");
       setTimeout(() => setSuccessMessage(null), 3000);
-      // Notify email
-      sendEmailNotification("Xóa nhật ký tập luyện", `Bạn vừa xóa một nhật ký tập luyện khỏi lịch sử.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/workout_history/${id}`);
     }
@@ -2602,32 +2581,91 @@ export default function App() {
       await deleteDoc(doc(db, `users/${auth.currentUser.uid}/gratitude_journal`, date));
       setSuccessMessage("Đã xóa nhật ký biết ơn!");
       setTimeout(() => setSuccessMessage(null), 3000);
-      // Notify email
-      sendEmailNotification("Xóa nhật ký biết ơn", `Bạn vừa xóa một nhật ký biết ơn khỏi lịch sử.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/gratitude_journal/${date}`);
     }
   };
 
-  const sendEmailNotification = async (action: string, details: string) => {
-    if (!auth.currentUser?.email) return;
+
+  const exportToExcel = () => {
     try {
-      await fetch('/api/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: auth.currentUser.email,
-          userName: profile.name,
-          action,
-          details,
-          timestamp: new Date().toISOString()
-        })
-      });
+      const wb = XLSX.utils.book_new();
+
+      // 1. Profile Sheet
+      const profileData = [{
+        "Họ và tên": profile.name,
+        "Email": profile.email,
+        "Giới tính": profile.gender === "male" ? "Nam" : "Nữ",
+        "Tuổi": profile.age,
+        "Chiều cao (cm)": profile.height,
+        "Cân nặng (kg)": profile.weight,
+        "Mức độ vận động": profile.activity,
+        "Trường": schoolProfile.school,
+        "Vai trò": schoolProfile.role,
+        "Khối": schoolProfile.grade,
+        "Lớp": schoolProfile.className
+      }];
+      const wsProfile = XLSX.utils.json_to_sheet(profileData);
+      XLSX.utils.book_append_sheet(wb, wsProfile, "Hồ sơ");
+
+      // 2. BMI History
+      const bmiData = bmiHistory.map(entry => ({
+        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
+        "Cân nặng (kg)": entry.weight,
+        "Chiều cao (cm)": entry.height,
+        "Chỉ số BMI": entry.score.toFixed(1),
+        "Phân loại": entry.label
+      }));
+      const wsBMI = XLSX.utils.json_to_sheet(bmiData);
+      XLSX.utils.book_append_sheet(wb, wsBMI, "Lịch sử BMI");
+
+      // 3. Mood History
+      const moodData = moodHistory.map(entry => ({
+        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
+        "Tâm trạng": MOOD_CONFIG[entry.mood].label,
+        "Ghi chú": entry.note || ""
+      }));
+      const wsMood = XLSX.utils.json_to_sheet(moodData);
+      XLSX.utils.book_append_sheet(wb, wsMood, "Tâm lý");
+
+      // 4. Nutrition History
+      const nutritionData = nutritionHistory.map(entry => ({
+        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
+        "Mục tiêu": NUTRITION_GOALS[entry.goal].label,
+        "Lời khuyên": entry.advice || ""
+      }));
+      const wsNutrition = XLSX.utils.json_to_sheet(nutritionData);
+      XLSX.utils.book_append_sheet(wb, wsNutrition, "Dinh dưỡng");
+
+      // 5. Workout History
+      const workoutData = workoutHistory.map(entry => ({
+        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
+        "Môn thể thao": entry.sportName,
+        "Thời gian (phút)": entry.duration,
+        "Cường độ": entry.intensity,
+        "Ghi chú": entry.note || ""
+      }));
+      const wsWorkout = XLSX.utils.json_to_sheet(workoutData);
+      XLSX.utils.book_append_sheet(wb, wsWorkout, "Tập luyện");
+
+      // 6. Gratitude Journal
+      const gratitudeData = gratitudeEntries.map(entry => ({
+        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
+        "Nội dung": entry.items.join(", ")
+      }));
+      const wsGratitude = XLSX.utils.json_to_sheet(gratitudeData);
+      XLSX.utils.book_append_sheet(wb, wsGratitude, "Nhật ký biết ơn");
+
+      // Generate Excel file and trigger download
+      XLSX.writeFile(wb, `NQD-Care_Data_${profile.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      setSuccessMessage("Đã xuất file Excel thành công!");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
-      console.error("Failed to send email notification:", error);
+      console.error("Excel export failed:", error);
+      // Fallback for iframe restrictions if needed
     }
   };
-
   const saveBMI = async () => {
     if (!bmiResult) return;
     const newEntry: BMIEntry = {
@@ -2644,8 +2682,6 @@ export default function App() {
     await saveProfileToFirebase(profile, schoolProfile);
     setSuccessMessage("Đã lưu kết quả BMI và cập nhật hồ sơ thành công!");
     setTimeout(() => setSuccessMessage(null), 3000);
-    // Notify email
-    sendEmailNotification("Cập nhật BMI", `Bạn vừa cập nhật chỉ số BMI mới: ${bmiResult.score.toFixed(1)} (${bmiResult.label}).`);
   };
 
   const saveMood = async () => {
@@ -2900,8 +2936,6 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
             </p>
           </div>
         </div>
-      ) : step === "login" ? (
-        <LoginScreen onLogin={loginWithGoogle} theme={mainTheme} />
       ) : (
         <>
           <header className="flex items-center justify-between mb-8 relative z-10">
@@ -2994,14 +3028,14 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   </div>
 
                   <div className="glass p-6 rounded-3xl space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Email (Google)</label>
-                      <input
-                        type="email"
-                        value={user?.email || profile.email}
-                        readOnly
-                        className="w-full bg-slate-100 border-none rounded-xl p-4 text-slate-500 font-medium cursor-not-allowed"
-                      />
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Dữ liệu cá nhân</label>
+                      <button
+                        onClick={exportToExcel}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-600 rounded-xl text-[10px] font-bold hover:bg-green-100 transition-all border border-green-100 shadow-sm"
+                      >
+                        <FileSpreadsheet size={12} /> Tải xuống Excel
+                      </button>
                     </div>
 
                     <div className="space-y-2">
@@ -3652,17 +3686,7 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                     else if (type === "nutrition") deleteNutritionEntry(id);
                     else if (type === "workout") deleteWorkoutEntry(id);
                   }}
-                  onBackup={() => {
-                    const summary = `
-                      BMI: ${bmiHistory.length} bản ghi
-                      Tâm lý: ${moodHistory.length} bản ghi
-                      Dinh dưỡng: ${nutritionHistory.length} bản ghi
-                      Tập luyện: ${workoutHistory.length} bản ghi
-                    `;
-                    sendEmailNotification("Sao lưu dữ liệu", `Dưới đây là bản tóm tắt dữ liệu của bạn: ${summary}`);
-                    setSuccessMessage("Đã gửi bản sao lưu về Gmail của bạn!");
-                    setTimeout(() => setSuccessMessage(null), 3000);
-                  }}
+                  onExportExcel={exportToExcel}
                   theme={mainTheme}
                 />
               )}
@@ -3734,10 +3758,19 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                       </div>
                     </button>
                     <button
-                      onClick={() => {
-                        if (window.confirm("Bạn có chắc chắn muốn đăng xuất? Dữ liệu của bạn được lưu an toàn trên đám mây.")) {
-                          logout();
-                          window.location.reload();
+                      onClick={async () => {
+                        if (user) {
+                          try {
+                            // Delete profile
+                            await deleteDoc(doc(db, "users", user.uid));
+                            // Note: Deleting subcollections in Firestore is complex from client side, 
+                            // but we can at least clear the local state and logout.
+                            // In a real app, you'd use a Cloud Function to delete subcollections.
+                            logout();
+                            window.location.reload();
+                          } catch (error) {
+                            console.error("Lỗi khi xóa dữ liệu:", error);
+                          }
                         }
                       }}
                       className="flex items-center gap-3 p-4 bg-red-50 rounded-2xl text-red-600 hover:bg-red-100 transition-all"
