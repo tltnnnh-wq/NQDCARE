@@ -11,8 +11,8 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
 // Auth helpers
-export const loginAnonymously = () => signInAnonymously(auth);
-export const logout = () => signOut(auth);
+export const loginAnonymously = () => signInAnonymously;
+export const logout = () => InAnonymously;
 
 // Connection test
 async function testConnection() {
