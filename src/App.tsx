@@ -43,7 +43,7 @@ import {
   ChevronUp,
   ExternalLink,
   Bell,
-  FileSpreadsheet,
+  Mail,
   ClipboardList,
   Trophy,
   Timer,
@@ -82,13 +82,12 @@ import {
   LineChart,
   Line
 } from "recharts";
-import * as XLSX from 'xlsx';
 import { GoogleGenAI } from "@google/genai";
 import { cn } from "./lib/utils";
 import { 
   auth, 
   db, 
-  loginAnonymously, 
+  loginWithGoogle, 
   logout, 
   onAuthStateChanged 
 } from "./firebase";
@@ -186,7 +185,6 @@ interface SportChallenge {
 
 interface UserProfile {
   name: string;
-  email: string;
   gender: "male" | "female";
   age: number;
   height: number; // in cm
@@ -551,21 +549,7 @@ interface DashboardProps {
 }
 
 function Dashboard({ profile, bmiHistory, moodHistory, nutritionHistory, onNavigate, onShowSettings }: DashboardProps) {
-  const lastBMI = useMemo(() => {
-    if (bmiHistory.length > 0) return bmiHistory[0];
-    if (profile.height > 0 && profile.weight > 0) {
-      const heightInMeters = profile.height / 100;
-      const score = profile.weight / (heightInMeters * heightInMeters);
-      let label = "Bình thường";
-      let color = "text-emerald-500";
-      if (score < 18.5) { label = "Thiếu cân"; color = "text-sky-500"; }
-      else if (score >= 23 && score < 25) { label = "Thừa cân"; color = "text-orange-500"; }
-      else if (score >= 25) { label = "Béo phì"; color = "text-red-500"; }
-      return { score, label, color, date: new Date().toISOString(), weight: profile.weight, height: profile.height, category: "normal" as any };
-    }
-    return null;
-  }, [bmiHistory, profile]);
-
+  const lastBMI = bmiHistory[0];
   const lastMood = moodHistory[0];
   const lastNutrition = nutritionHistory[0];
 
@@ -590,17 +574,11 @@ function Dashboard({ profile, bmiHistory, moodHistory, nutritionHistory, onNavig
       exit={{ opacity: 0, y: -20 }}
       className="space-y-6 pb-20"
     >
-      <div className="flex items-end justify-between">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-extrabold text-slate-800">
-            Chào, {profile.name.split(' ')[0]}!
-          </h2>
-          <p className="text-slate-500 font-medium">Tổng quan sức khỏe hôm nay</p>
-        </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold border border-emerald-100 shadow-sm">
-          <RefreshCw size={10} className="animate-spin-slow" />
-          <span>Đã tự động lưu (Cloud)</span>
-        </div>
+      <div className="space-y-1">
+        <h2 className="text-3xl font-extrabold text-slate-800">
+          Chào, {profile.name.split(' ')[0]}!
+        </h2>
+        <p className="text-slate-500 font-medium">Tổng quan sức khỏe hôm nay</p>
       </div>
 
       {/* BMI Card */}
@@ -1119,12 +1097,10 @@ interface HistoryScreenProps {
   nutritionHistory: NutritionEntry[];
   workoutHistory: WorkoutEntry[];
   onBack: () => void;
-  onDelete: (type: "bmi" | "mood" | "nutrition" | "workout", id: string) => void;
-  onExportExcel: () => void;
   theme: any;
 }
 
-function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHistory, onBack, onDelete, onExportExcel, theme }: HistoryScreenProps) {
+function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHistory, onBack, theme }: HistoryScreenProps) {
   const [activeTab, setActiveTab] = useState<"bmi" | "mood" | "nutrition" | "workout">("bmi");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -1161,21 +1137,11 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
       exit={{ opacity: 0, x: -20 }}
       className="space-y-6 pb-20"
     >
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <button onClick={onBack} className="p-2 -ml-2">
-            <ArrowLeft size={24} />
-          </button>
-          <h2 className="text-2xl font-bold text-slate-800">Lịch sử chi tiết</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onExportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-xl text-xs font-bold hover:bg-green-100 transition-all"
-          >
-            <FileSpreadsheet size={16} /> Xuất Excel
-          </button>
-        </div>
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={onBack} className="p-2 -ml-2">
+          <ArrowLeft size={24} />
+        </button>
+        <h2 className="text-2xl font-bold text-slate-800">Lịch sử chi tiết</h2>
       </div>
 
       {/* Tabs */}
@@ -1219,7 +1185,7 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
       </div>
 
       {/* Content */}
-      <div className="space-y-8 overflow-y-auto max-h-[calc(100vh-250px)] pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+      <div className="space-y-8">
         {activeTab === "bmi" && (
           Object.keys(bmiGroups).length > 0 ? (
             Object.entries(bmiGroups).map(([date, entries]) => (
@@ -1234,21 +1200,10 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
                     const id = `bmi-${date}-${idx}`;
                     const isExpanded = expandedId === id;
                     return (
-                      <div key={idx} className="glass rounded-3xl overflow-hidden relative group">
-                        <div className="absolute right-4 top-5 flex items-center gap-2 z-10">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDelete("bmi", (entry as any).id || "");
-                            }}
-                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
+                      <div key={idx} className="glass rounded-3xl overflow-hidden">
                         <button 
                           onClick={() => setExpandedId(isExpanded ? null : id)}
-                          className="w-full p-5 flex items-center justify-between text-left pr-12"
+                          className="w-full p-5 flex items-center justify-between text-left"
                         >
                           <div className="flex items-center gap-4">
                             <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg", entry.color.replace('text', 'bg').replace('500', '100'), entry.color)}>
@@ -1318,21 +1273,10 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
                     const id = `mood-${date}-${idx}`;
                     const isExpanded = expandedId === id;
                     return (
-                      <div key={idx} className="glass rounded-3xl overflow-hidden relative group">
-                        <div className="absolute right-4 top-5 flex items-center gap-2 z-10">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDelete("mood", (entry as any).id || "");
-                            }}
-                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
+                      <div key={idx} className="glass rounded-3xl overflow-hidden">
                         <button 
                           onClick={() => setExpandedId(isExpanded ? null : id)}
-                          className="w-full p-5 flex items-center justify-between text-left pr-12"
+                          className="w-full p-5 flex items-center justify-between text-left"
                         >
                           <div className="flex items-center gap-4">
                             <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", config.color.replace('text', 'bg').replace('500', '100'))}>
@@ -1401,21 +1345,10 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
                     const id = `nutrition-${date}-${idx}`;
                     const isExpanded = expandedId === id;
                     return (
-                      <div key={idx} className="glass rounded-3xl overflow-hidden relative group">
-                        <div className="absolute right-4 top-5 flex items-center gap-2 z-10">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDelete("nutrition", (entry as any).id || "");
-                            }}
-                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
+                      <div key={idx} className="glass rounded-3xl overflow-hidden">
                         <button 
                           onClick={() => setExpandedId(isExpanded ? null : id)}
-                          className="w-full p-5 flex items-center justify-between text-left pr-12"
+                          className="w-full p-5 flex items-center justify-between text-left"
                         >
                           <div className="flex items-center gap-4">
                             <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", goalConfig.color.replace('text', 'bg').replace('500', '100'))}>
@@ -1485,21 +1418,10 @@ function HistoryScreen({ bmiHistory, moodHistory, nutritionHistory, workoutHisto
                     const id = `workout-${date}-${idx}`;
                     const isExpanded = expandedId === id;
                     return (
-                      <div key={idx} className="glass rounded-3xl overflow-hidden relative group">
-                        <div className="absolute right-4 top-5 flex items-center gap-2 z-10">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDelete("workout", (entry as any).id || "");
-                            }}
-                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
+                      <div key={idx} className="glass rounded-3xl overflow-hidden">
                         <button 
                           onClick={() => setExpandedId(isExpanded ? null : id)}
-                          className="w-full p-5 flex items-center justify-between text-left pr-12"
+                          className="w-full p-5 flex items-center justify-between text-left"
                         >
                           <div className="flex items-center gap-4">
                             <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", sport?.bg || "bg-orange-100")}>
@@ -1591,8 +1513,7 @@ function VitalMindScreen({
   setShowMoodHistory,
   addAiFeedbackToFirebase,
   addGratitudeEntryToFirebase,
-  setSuccessMessage,
-  onDeleteGratitude
+  setSuccessMessage
 }: {
   onBack: () => void;
   moodHistory: MoodEntry[];
@@ -1617,7 +1538,6 @@ function VitalMindScreen({
   addAiFeedbackToFirebase: (feedback: any) => Promise<void>;
   addGratitudeEntryToFirebase: (entry: GratitudeEntry) => Promise<void>;
   setSuccessMessage: (msg: string | null) => void;
-  onDeleteGratitude: (date: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"mood" | "gratitude">("mood");
   const [isPlaying, setIsPlaying] = useState<string | null>(null);
@@ -1992,18 +1912,7 @@ function VitalMindScreen({
                         >
                           <div className="flex items-center justify-between">
                             <p className="text-[10px] font-bold text-slate-400">{entry.date}</p>
-                            <div className="flex items-center gap-2">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDeleteGratitude(entry.date);
-                                }}
-                                className="p-1 text-slate-300 hover:text-red-500 transition-colors"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                              <Heart size={12} className="text-pink-400" />
-                            </div>
+                            <Heart size={12} className="text-pink-400" />
                           </div>
                           <ul className="space-y-1">
                             {entry.items.map((item, j) => (
@@ -2093,7 +2002,7 @@ function LoginScreen({ onLogin, theme }: { onLogin: () => void, theme: any }) {
         <div className="glass p-8 rounded-[40px] shadow-2xl space-y-6 border border-white/50">
           <div className="space-y-2">
             <h2 className="text-xl font-bold text-slate-800">Chào mừng bạn!</h2>
-            <p className="text-sm text-slate-500">Bắt đầu hành trình chăm sóc sức khỏe của bạn ngay hôm nay.</p>
+            <p className="text-sm text-slate-500">Đăng nhập để lưu trữ dữ liệu sức khỏe của bạn trọn đời.</p>
           </div>
           
           <button
@@ -2105,11 +2014,11 @@ function LoginScreen({ onLogin, theme }: { onLogin: () => void, theme: any }) {
             )}
           >
             <LogIn size={20} />
-            Bắt đầu ngay
+            Đăng nhập bằng Google
           </button>
           
           <p className="text-[10px] text-slate-400">
-            Dữ liệu của bạn sẽ được lưu trữ an toàn trên thiết bị này.
+            Bằng cách đăng nhập, bạn đồng ý với các điều khoản sử dụng của chúng tôi.
           </p>
         </div>
       </motion.div>
@@ -2132,7 +2041,6 @@ export default function App() {
   });
   const [profile, setProfile] = useState<UserProfile>({
     name: "",
-    email: "",
     gender: "male",
     age: 0,
     height: 0,
@@ -2190,12 +2098,12 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
-      if (!currentUser) {
-        loginAnonymously().catch(err => console.error("Anonymous login failed", err));
+      if (!currentUser && step !== "loading") {
+        setStep("login");
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [step]);
 
   // Firestore Sync
   useEffect(() => {
@@ -2216,7 +2124,6 @@ export default function App() {
         setProfile((prev) => ({
           ...prev,
           name: data.name || "",
-          email: data.email || user.email || "",
           gender: data.gender || "male",
           age: data.age || 0,
           height: data.height || 0,
@@ -2284,31 +2191,6 @@ export default function App() {
   }, [user]);
 
   // Persistence Helpers
-  const handleBackupData = () => {
-    const dataToBackup = {
-      profile,
-      schoolProfile,
-      bmiHistory,
-      moodHistory,
-      nutritionHistory,
-      gratitudeEntries,
-      workoutHistory,
-      aiFeedback,
-      backupDate: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(dataToBackup, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `nqd_care_backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setSuccessMessage("Đã tạo bản sao lưu thành công!");
-    setTimeout(() => setSuccessMessage(null), 3000);
-  };
-
   const saveProfileToFirebase = async (newProfile: UserProfile, newSchoolProfile: SchoolProfile) => {
     if (!user) return;
     const path = `users/${user.uid}`;
@@ -2316,7 +2198,6 @@ export default function App() {
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         name: newProfile.name,
-        email: user.email || newProfile.email,
         gender: newProfile.gender,
         age: newProfile.age,
         height: newProfile.height,
@@ -2405,28 +2286,30 @@ export default function App() {
     }
   };
 
-  // Handle splash screen transition
-  useEffect(() => {
-    if (step === "loading" && isAuthReady && user) {
-      const timer = setTimeout(() => {
-        if (isProfileSetup) {
-          setStep("dashboard");
-        } else {
-          setStep("profile_setup");
-        }
-      }, 8000);
-      return () => clearTimeout(timer);
-    }
-  }, [step, isAuthReady, user, isProfileSetup]);
-
-  // Splash Screen Logic (Quotes only)
+  // Splash Screen Logic
   useEffect(() => {
     if (step === "loading") {
       const quoteInterval = setInterval(() => {
         setQuoteIndex((prev) => (prev + 1) % POSITIVE_QUOTES.length);
       }, 1500);
 
+      const timer = setTimeout(() => {
+        if (isAuthReady) {
+          if (user) {
+            if (isProfileSetup) {
+              setStep("dashboard");
+            } else {
+              setStep("profile_setup");
+            }
+          } else {
+            setStep("login");
+          }
+        }
+        clearInterval(quoteInterval);
+      }, 8000);
+
       return () => {
+        clearTimeout(timer);
         clearInterval(quoteInterval);
       };
     }
@@ -2531,141 +2414,6 @@ export default function App() {
     return { score, category, label, color, description, nutrition, exercise };
   }, [profile, step]);
 
-  const deleteBmiEntry = async (id: string) => {
-    if (!auth.currentUser) return;
-    try {
-      await deleteDoc(doc(db, `users/${auth.currentUser.uid}/bmi_history`, id));
-      setSuccessMessage("Đã xóa kết quả BMI!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/bmi_history/${id}`);
-    }
-  };
-
-  const deleteMoodEntry = async (id: string) => {
-    if (!auth.currentUser) return;
-    try {
-      await deleteDoc(doc(db, `users/${auth.currentUser.uid}/mood_history`, id));
-      setSuccessMessage("Đã xóa nhật ký tâm lý!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/mood_history/${id}`);
-    }
-  };
-
-  const deleteNutritionEntry = async (id: string) => {
-    if (!auth.currentUser) return;
-    try {
-      await deleteDoc(doc(db, `users/${auth.currentUser.uid}/nutrition_history`, id));
-      setSuccessMessage("Đã xóa nhật ký dinh dưỡng!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/nutrition_history/${id}`);
-    }
-  };
-
-  const deleteWorkoutEntry = async (id: string) => {
-    if (!auth.currentUser) return;
-    try {
-      await deleteDoc(doc(db, `users/${auth.currentUser.uid}/workout_history`, id));
-      setSuccessMessage("Đã xóa nhật ký tập luyện!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/workout_history/${id}`);
-    }
-  };
-
-  const deleteGratitudeEntry = async (date: string) => {
-    if (!auth.currentUser) return;
-    try {
-      await deleteDoc(doc(db, `users/${auth.currentUser.uid}/gratitude_journal`, date));
-      setSuccessMessage("Đã xóa nhật ký biết ơn!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/gratitude_journal/${date}`);
-    }
-  };
-
-
-  const exportToExcel = () => {
-    try {
-      const wb = XLSX.utils.book_new();
-
-      // 1. Profile Sheet
-      const profileData = [{
-        "Họ và tên": profile.name,
-        "Email": profile.email,
-        "Giới tính": profile.gender === "male" ? "Nam" : "Nữ",
-        "Tuổi": profile.age,
-        "Chiều cao (cm)": profile.height,
-        "Cân nặng (kg)": profile.weight,
-        "Mức độ vận động": profile.activity,
-        "Trường": schoolProfile.school,
-        "Vai trò": schoolProfile.role,
-        "Khối": schoolProfile.grade,
-        "Lớp": schoolProfile.className
-      }];
-      const wsProfile = XLSX.utils.json_to_sheet(profileData);
-      XLSX.utils.book_append_sheet(wb, wsProfile, "Hồ sơ");
-
-      // 2. BMI History
-      const bmiData = bmiHistory.map(entry => ({
-        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
-        "Cân nặng (kg)": entry.weight,
-        "Chiều cao (cm)": entry.height,
-        "Chỉ số BMI": entry.score.toFixed(1),
-        "Phân loại": entry.label
-      }));
-      const wsBMI = XLSX.utils.json_to_sheet(bmiData);
-      XLSX.utils.book_append_sheet(wb, wsBMI, "Lịch sử BMI");
-
-      // 3. Mood History
-      const moodData = moodHistory.map(entry => ({
-        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
-        "Tâm trạng": MOOD_CONFIG[entry.mood].label,
-        "Ghi chú": entry.note || ""
-      }));
-      const wsMood = XLSX.utils.json_to_sheet(moodData);
-      XLSX.utils.book_append_sheet(wb, wsMood, "Tâm lý");
-
-      // 4. Nutrition History
-      const nutritionData = nutritionHistory.map(entry => ({
-        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
-        "Mục tiêu": NUTRITION_GOALS[entry.goal].label,
-        "Lời khuyên": entry.advice || ""
-      }));
-      const wsNutrition = XLSX.utils.json_to_sheet(nutritionData);
-      XLSX.utils.book_append_sheet(wb, wsNutrition, "Dinh dưỡng");
-
-      // 5. Workout History
-      const workoutData = workoutHistory.map(entry => ({
-        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
-        "Môn thể thao": entry.sportName,
-        "Thời gian (phút)": entry.duration,
-        "Cường độ": entry.intensity,
-        "Ghi chú": entry.note || ""
-      }));
-      const wsWorkout = XLSX.utils.json_to_sheet(workoutData);
-      XLSX.utils.book_append_sheet(wb, wsWorkout, "Tập luyện");
-
-      // 6. Gratitude Journal
-      const gratitudeData = gratitudeEntries.map(entry => ({
-        "Ngày": new Date(entry.date).toLocaleString('vi-VN'),
-        "Nội dung": entry.items.join(", ")
-      }));
-      const wsGratitude = XLSX.utils.json_to_sheet(gratitudeData);
-      XLSX.utils.book_append_sheet(wb, wsGratitude, "Nhật ký biết ơn");
-
-      // Generate Excel file and trigger download
-      XLSX.writeFile(wb, `NQD-Care_Data_${profile.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
-      
-      setSuccessMessage("Đã xuất file Excel thành công!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (error) {
-      console.error("Excel export failed:", error);
-      // Fallback for iframe restrictions if needed
-    }
-  };
   const saveBMI = async () => {
     if (!bmiResult) return;
     const newEntry: BMIEntry = {
@@ -2678,9 +2426,7 @@ export default function App() {
       color: bmiResult.color,
     };
     await addBmiEntryToFirebase(newEntry);
-    // Also update main profile to persist height/weight
-    await saveProfileToFirebase(profile, schoolProfile);
-    setSuccessMessage("Đã lưu kết quả BMI và cập nhật hồ sơ thành công!");
+    setSuccessMessage("Đã lưu kết quả BMI vào lịch sử thành công!");
     setTimeout(() => setSuccessMessage(null), 3000);
   };
 
@@ -2690,11 +2436,8 @@ export default function App() {
       date: new Date().toISOString(),
       mood: currentMood,
       note: moodNote,
+      followUp: mentalIssue || followUpNote ? `${mentalIssue} ${followUpNote}`.trim() : undefined,
     };
-    const followUpText = `${mentalIssue} ${followUpNote}`.trim();
-    if (followUpText) {
-      newEntry.followUp = followUpText;
-    }
     await addMoodEntryToFirebase(newEntry);
 
     // Reset inputs after saving
@@ -2936,6 +2679,8 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
             </p>
           </div>
         </div>
+      ) : step === "login" ? (
+        <LoginScreen onLogin={loginWithGoogle} theme={mainTheme} />
       ) : (
         <>
           <header className="flex items-center justify-between mb-8 relative z-10">
@@ -2952,7 +2697,6 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   className="flex flex-col items-end mr-2 hover:bg-slate-100 p-2 rounded-xl transition-all text-right"
                 >
                   <p className="text-[10px] font-bold text-slate-800 leading-none">{profile.name || "Người dùng"}</p>
-                  <p className="text-[8px] text-slate-400 font-medium">{profile.email}</p>
                   <p className="text-[8px] text-slate-400 uppercase tracking-wider">
                     {schoolProfile.className}
                   </p>
@@ -3028,16 +2772,6 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   </div>
 
                   <div className="glass p-6 rounded-3xl space-y-6">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Dữ liệu cá nhân</label>
-                      <button
-                        onClick={exportToExcel}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-600 rounded-xl text-[10px] font-bold hover:bg-green-100 transition-all border border-green-100 shadow-sm"
-                      >
-                        <FileSpreadsheet size={12} /> Tải xuống Excel
-                      </button>
-                    </div>
-
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Họ và tên</label>
                       <input
@@ -3047,29 +2781,6 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                         placeholder="Nhập tên của bạn..."
                         className="w-full bg-white/50 border-none rounded-xl p-4 focus:ring-2 focus:ring-blue-400 outline-none font-medium"
                       />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Chiều cao (cm)</label>
-                        <input
-                          type="number"
-                          value={profile.height || ""}
-                          onChange={(e) => setProfile({ ...profile, height: parseInt(e.target.value) || 0 })}
-                          placeholder="cm"
-                          className="w-full bg-white/50 border-none rounded-xl p-4 focus:ring-2 focus:ring-blue-400 outline-none font-medium"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cân nặng (kg)</label>
-                        <input
-                          type="number"
-                          value={profile.weight || ""}
-                          onChange={(e) => setProfile({ ...profile, weight: parseInt(e.target.value) || 0 })}
-                          placeholder="kg"
-                          className="w-full bg-white/50 border-none rounded-xl p-4 focus:ring-2 focus:ring-blue-400 outline-none font-medium"
-                        />
-                      </div>
                     </div>
 
                     {schoolProfile.role === "student" && (
@@ -3135,7 +2846,7 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   </div>
 
                   <button
-                    disabled={!profile.name || !profile.height || !profile.weight || (schoolProfile.role === "student" && (!schoolProfile.grade || !schoolProfile.className))}
+                    disabled={!profile.name || (schoolProfile.role === "student" && (!schoolProfile.grade || !schoolProfile.className))}
                     onClick={() => {
                       saveProfileToFirebase(profile, schoolProfile);
                       setStep("dashboard");
@@ -3277,10 +2988,7 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   </div>
 
                   <button
-                    onClick={() => {
-                      saveProfileToFirebase(profile, schoolProfile);
-                      setStep("result");
-                    }}
+                    onClick={() => setStep("result")}
                     className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-xl hover:bg-slate-800 transition-all active:scale-95"
                   >
                     Phân tích ngay
@@ -3432,7 +3140,6 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   addAiFeedbackToFirebase={addAiFeedbackToFirebase}
                   addGratitudeEntryToFirebase={addGratitudeEntryToFirebase}
                   setSuccessMessage={setSuccessMessage}
-                  onDeleteGratitude={deleteGratitudeEntry}
                 />
               )}
 
@@ -3680,13 +3387,6 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   nutritionHistory={nutritionHistory}
                   workoutHistory={workoutHistory}
                   onBack={() => setStep("dashboard")}
-                  onDelete={(type, id) => {
-                    if (type === "bmi") deleteBmiEntry(id);
-                    else if (type === "mood") deleteMoodEntry(id);
-                    else if (type === "nutrition") deleteNutritionEntry(id);
-                    else if (type === "workout") deleteWorkoutEntry(id);
-                  }}
-                  onExportExcel={exportToExcel}
                   theme={mainTheme}
                 />
               )}
@@ -3746,31 +3446,10 @@ Lưu ý: Lời khuyên này chỉ mang tính chất tham khảo. Sẽ tốt hơn
                   <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Dữ liệu & Hồ sơ</p>
                   <div className="grid grid-cols-1 gap-3">
                     <button
-                      onClick={handleBackupData}
-                      className="flex items-center gap-3 p-4 bg-emerald-50 rounded-2xl text-emerald-600 hover:bg-emerald-100 transition-all"
-                    >
-                      <div className="p-2 bg-white rounded-xl shadow-sm">
-                        <Download size={18} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-bold">Sao lưu dữ liệu</p>
-                        <p className="text-[10px] opacity-70">Tải xuống toàn bộ lịch sử sức khỏe</p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (user) {
-                          try {
-                            // Delete profile
-                            await deleteDoc(doc(db, "users", user.uid));
-                            // Note: Deleting subcollections in Firestore is complex from client side, 
-                            // but we can at least clear the local state and logout.
-                            // In a real app, you'd use a Cloud Function to delete subcollections.
-                            logout();
-                            window.location.reload();
-                          } catch (error) {
-                            console.error("Lỗi khi xóa dữ liệu:", error);
-                          }
+                      onClick={() => {
+                        if (window.confirm("Bạn có chắc chắn muốn đăng xuất? Dữ liệu của bạn được lưu an toàn trên đám mây.")) {
+                          logout();
+                          window.location.reload();
                         }
                       }}
                       className="flex items-center gap-3 p-4 bg-red-50 rounded-2xl text-red-600 hover:bg-red-100 transition-all"

@@ -119,15 +119,11 @@ service cloud.firestore {
     }
     
     function isValidMoodEntry(data) {
-      return data.date is string && data.mood is string &&
-             (!('note' in data) || (data.note is string && data.note.size() < 1000)) &&
-             (!('followUp' in data) || (data.followUp is string && data.followUp.size() < 2000));
+      return data.date is string && data.mood is string;
     }
     
     function isValidNutritionEntry(data) {
-      return data.date is string && data.goal is string &&
-             data.advice is string && data.advice.size() < 10000 &&
-             data.waterIntake is number;
+      return data.date is string && data.goal is string;
     }
     
     function isValidGratitudeEntry(data) {
@@ -135,8 +131,7 @@ service cloud.firestore {
     }
 
     function isValidAiFeedback(data) {
-      return data.date is string && data.issue is string && data.advice is string &&
-             data.helpful is bool && (!('note' in data) || (data.note is string && data.note.size() < 1000));
+      return data.date is string && data.issue is string && data.advice is string;
     }
 
     function isValidWorkoutEntry(data) {
